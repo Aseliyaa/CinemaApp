@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">CinemaApp</string>
+    <string name="intro_title">Watch Videos in\n Virtual Reality</string>
+    <string name="username">Username</string>
+    <string name="log_in">Log in</string>
+    <string name="password">Password</string>
+    <string name="forget_your_password">Forget Your Password?</string>
+    <string name="have_an_account">Don\'t have an account?</string>
+    <string name="register_now">Register now</string>
+    <string name="login">Login</string>
+    <string name="like_to_watch">What would you\n like to watch?</string>
+    <string name="search_movies">Search Movies...</string>
+    <string name="new_movies">New Movies</string>
+    <string name="get_in">Get In</string>
+    <string name="upcoming_movies">Upcoming movies</string>
+    <string name="sign_up">Sign up</string>
+    <string name="repeat_password">Repeat password</string>
+    <string name="already_have_an_account">Already have an account?</string>
+    <string name="email">Email</string>
+    <string name="genres">Genres</string>
+</resources>

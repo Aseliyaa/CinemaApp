@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "125992124552",
+    "project_id": "cinemaapp-f5797",
+    "storage_bucket": "cinemaapp-f5797.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:125992124552:android:2128be9256f07f566fdf3d",
+        "android_client_info": {
+          "package_name": "com.example.cinemaapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAH42V2_gwqMT2X2EUWZsoRSDnq3Hf7uy4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
