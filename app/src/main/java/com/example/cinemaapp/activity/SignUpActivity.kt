@@ -9,9 +9,13 @@ import android.widget.Toast
 import androidx.appcompat.widget.AppCompatButton
 import com.example.cinemaapp.R
 import com.example.cinemaapp.databinding.ActivitySignUpBinding
+import com.example.cinemaapp.models.User
+import com.google.android.gms.tasks.OnSuccessListener
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
 
 class SignUpActivity : AppCompatActivity() {
     private lateinit var signUpBtn: AppCompatButton
@@ -22,6 +26,8 @@ class SignUpActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySignUpBinding
     private lateinit var auth: FirebaseAuth
+    private lateinit var db: FirebaseDatabase
+    private lateinit var usersRef: DatabaseReference
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,12 +39,14 @@ class SignUpActivity : AppCompatActivity() {
         onButtonsClick()
     }
 
-    private fun initBinding(){
+    private fun initBinding() {
         binding = ActivitySignUpBinding.inflate(layoutInflater)
     }
 
     private fun initAuth() {
         auth = Firebase.auth
+        db = FirebaseDatabase.getInstance()
+        usersRef = db.getReference("users")
     }
 
     private fun initView() {
@@ -76,16 +84,38 @@ class SignUpActivity : AppCompatActivity() {
 
         auth.createUserWithEmailAndPassword(email, password).addOnCompleteListener(this) {
             if (it.isSuccessful) {
-                Toast.makeText(this, "Successfully Signed Up!", Toast.LENGTH_SHORT).show()
+                val user = User()
+                user.email = email
+                user.password = password
+                user.name = ""
+                user.birthday = ""
+                user.phone = ""
 
-                val intent = Intent(this, MainActivity::class.java)
-                intent.putExtra("userId", auth.currentUser?.uid)
-                startActivity(intent)
+                usersRef.child(auth.currentUser!!.uid)
+                    .setValue(user)
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "Successfully Signed Up!", Toast.LENGTH_SHORT)
+                            .show()
+                        val intent = Intent(this, MainActivity::class.java)
+                        intent.putExtra("userId", auth.currentUser?.uid)
+                        startActivity(intent)
 
-                finish()
+                        finish()
+                    }.addOnFailureListener(this) { exception ->
+                        Toast.makeText(
+                            applicationContext,
+                            exception.localizedMessage,
+                            Toast.LENGTH_SHORT
+                        )
+                            .show()
+                    }
             }
         }.addOnFailureListener(this) { exception ->
-            Toast.makeText(applicationContext, exception.localizedMessage, Toast.LENGTH_SHORT)
+            Toast.makeText(
+                applicationContext,
+                exception.localizedMessage,
+                Toast.LENGTH_SHORT
+            )
                 .show()
         }
     }
