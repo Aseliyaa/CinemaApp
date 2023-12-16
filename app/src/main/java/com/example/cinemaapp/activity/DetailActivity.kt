@@ -14,11 +14,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
-import com.example.cinemaapp.adapter.GenresListAdapter
 import com.example.cinemaapp.adapter.GenresListDetailAdapter
 
 import com.example.cinemaapp.adapter.ImageListAdapter
 import com.example.cinemaapp.api.ApiService
+import com.example.cinemaapp.api.RequestsOperator.Companion.sendDetailsRequest
 import com.example.cinemaapp.databinding.ActivityDetailBinding
 import com.example.cinemaapp.db.AppDatabase
 import com.example.cinemaapp.db.FilmItemDao
@@ -27,9 +27,6 @@ import com.google.android.material.imageview.ShapeableImageView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 
 class DetailActivity : AppCompatActivity() {
     private lateinit var titleTxt: TextView
@@ -53,7 +50,6 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
     private lateinit var filmItemDao: FilmItemDao
 
-    private lateinit var apiService: ApiService
     private lateinit var userId: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,16 +58,14 @@ class DetailActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         initUserAndFilmId()
-        initDb()
         initView()
-        updateLikeBtnColor(idFilm)
-        initApiService()
-        sendRequest()
-        likeItem()
-    }
 
-    private fun initApiService() {
-        apiService = ApiService.create()
+        lifecycleScope.launch {
+            initDb()
+            updateLikeBtnColor(idFilm)
+            loadData()
+            likeItem()
+        }
     }
 
     private fun updateLikeBtnColor(id: Int?) {
@@ -89,74 +83,68 @@ class DetailActivity : AppCompatActivity() {
         likeBtn.setOnClickListener {
 
             lifecycleScope.launch {
-                if (!isContain(item.id)) {
-                    withContext(Dispatchers.IO) {
-                        item.userId = userId
+                val isContained = isContain(item.id)
+
+                val toastMessage = if (!isContained) {
+                    item.userId = userId
+                    withContext(Dispatchers.Default) {
                         filmItemDao.addFilm(item)
                     }
-
-                    updateLikeBtnColor(item.id)
-
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(applicationContext, "Added to Favorites!", Toast.LENGTH_SHORT).show()
-                    }
+                    "Added to Favorites!"
                 } else {
-                    withContext(Dispatchers.IO) {
+                    withContext(Dispatchers.Default) {
                         filmItemDao.deleteFilm(item.id, userId)
                         filmItemDao.updateFilmsUid(item.uid)
                     }
+                    "Deleted from Favorites!"
+                }
 
-                    updateLikeBtnColor(item.id)
+                updateLikeBtnColor(item.id)
 
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(applicationContext, "Deleted from Favorites!", Toast.LENGTH_SHORT).show()
-                    }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        applicationContext,
+                        toastMessage,
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
     }
 
-    private fun isContain(id: Int?): Boolean {
-        val films = filmItemDao.getById(userId)
-
-        for (f in films) {
-            if (f.id == id)
-                return true
+    private suspend fun isContain(id: Int?): Boolean {
+        return withContext(Dispatchers.Default) {
+            val films = filmItemDao.getById(userId)
+            films.any { it.id == id }
         }
-        return false
     }
 
-    private fun sendRequest() {
+    private fun loadData() {
         progressBar.visibility = View.VISIBLE
         scrollView.visibility = View.GONE
 
-        val call = apiService.getMovieDetails(idFilm)
+        lifecycleScope.launch {
+            try {
+                item = sendDetailsRequest(idFilm)
 
-        call.enqueue(object : Callback<FilmItem>{
-            override fun onResponse(call: Call<FilmItem>, response: Response<FilmItem>) {
+                progressBar.visibility = View.GONE
+                scrollView.visibility = View.VISIBLE
 
-                if (response.isSuccessful){
-                    item = response.body()!!
+                posterNormalImg.load(item.poster)
+                posterBigImg.load(item.poster)
+                titleTxt.text = item.title
+                movieRateTxt.text = item.imdbRating
+                movieTimeTxt.text = item.runtime
+                movieDateTxt.text = item.released
+                movieSummaryInfo.text = item.plot
+                movieActorInfo.text = item.actors
+                recyclerView.adapter = ImageListAdapter(item.images)
+                genresRecyclerView.adapter = item.genres?.let { GenresListDetailAdapter(it) }
 
-                    progressBar.visibility = View.GONE
-                    scrollView.visibility = View.VISIBLE
-                    posterNormalImg.load(item.poster)
-                    posterBigImg.load(item.poster)
-                    titleTxt.text = item.title
-                    movieRateTxt.text = item.imdbRating
-                    movieTimeTxt.text = item.runtime
-                    movieDateTxt.text = item.released
-                    movieSummaryInfo.text = item.plot
-                    movieActorInfo.text = item.actors
-                    recyclerView.adapter = ImageListAdapter(item.images)
-                    genresRecyclerView.adapter = item.genres?.let { GenresListDetailAdapter(it) }
-                }
-            }
-
-            override fun onFailure(call: Call<FilmItem>, t: Throwable) {
+            } catch (_: Exception) {
                 progressBar.visibility = View.GONE
             }
-        })
+        }
     }
 
     private fun initView() {
@@ -186,9 +174,11 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun initDb() {
-        db = AppDatabase.initDb(this)
-        filmItemDao = db.filmItemDao()
+    private suspend fun initDb() {
+        withContext(Dispatchers.Default) {
+            db = AppDatabase.initDb(applicationContext)
+            filmItemDao = db.filmItemDao()
+        }
     }
 
     private fun initUserAndFilmId() {

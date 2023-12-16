@@ -1,15 +1,21 @@
 package com.example.cinemaapp.activity
 
+import android.app.Activity
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.View
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ProgressBar
+import android.widget.ScrollView
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.CompositePageTransformer
@@ -18,18 +24,18 @@ import androidx.viewpager2.widget.ViewPager2
 import com.example.cinemaapp.adapter.FilmListAdapter
 import com.example.cinemaapp.adapter.GenresListAdapter
 import com.example.cinemaapp.adapter.SliderAdapter
-import com.example.cinemaapp.api.ApiService
+import com.example.cinemaapp.api.RequestsOperator.Companion.sendGenresRequest
+import com.example.cinemaapp.api.RequestsOperator.Companion.sendRequest
 import com.example.cinemaapp.databinding.ActivityMainBinding
 import com.example.cinemaapp.domain.Data
-import com.example.cinemaapp.domain.Genres
-import com.example.cinemaapp.domain.ListFilm
 import com.example.cinemaapp.domain.SliderItems
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 import kotlin.math.abs
-
 
 class MainActivity : AppCompatActivity() {
     private lateinit var recyclerViewNewMovies: RecyclerView
@@ -38,22 +44,25 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loading1: ProgressBar
     private lateinit var loading2: ProgressBar
     private lateinit var loading3: ProgressBar
+    private lateinit var loading4: ProgressBar
+
+    private lateinit var personalPageActivityBtn: ImageView
 
     private lateinit var likedMoviesActivityBtn: ImageView
     private lateinit var searchTxt: EditText
 
-    private lateinit var userId: String
+    private lateinit var scrollView: ScrollView
 
-    private lateinit var apiService: ApiService
+    private lateinit var userId: String
 
     private lateinit var binding: ActivityMainBinding
 
     private lateinit var viewPager2: ViewPager2
 
-    val slideHandler = Handler()
+    val slideHandler = Handler(Looper.myLooper()!!)
 
-    private lateinit var newMovies: ArrayList<Data>
-    private lateinit var upComingMovies: ArrayList<Data>
+    private lateinit var newMovies: List<Data>
+    private lateinit var upComingMovies: List<Data>
 
     private var activeCategories = mutableListOf<String>()
 
@@ -62,88 +71,63 @@ class MainActivity : AppCompatActivity() {
         initBinding()
         setContentView(binding.root)
 
-        initUserId()
-        initView()
-        initListeners()
-        initApiService()
-
-        getAndSetGenres()
-        getBannersImages()
-        newMovies = sendRequest(loading1, recyclerViewNewMovies, 1)
-        upComingMovies = sendRequest(loading2, recyclerViewUpcoming, 3)
+        lifecycleScope.launch {
+            initUserId()
+            initView()
+            initListeners()
+            loadGenres()
+            loadBanners(10)
+            newMovies = loadData(loading3, recyclerViewNewMovies, 1)
+            upComingMovies = loadData(loading4, recyclerViewUpcoming, 3)
+        }
     }
 
-    private fun getAndSetGenres() {
-        val call = apiService.getGenres()
-
-        call.enqueue(object : Callback<List<Genres>>{
-
-            override fun onResponse(call: Call<List<Genres>>, response: Response<List<Genres>>) {
-                if (response.isSuccessful){
-                    val genres = response.body()
-
-                    recyclerViewGenres.adapter = genres?.let { GenresListAdapter(it) }
-                }
-            }
-
-            override fun onFailure(call: Call<List<Genres>>, t: Throwable) {
-
-            }
-
-        })
+    private suspend fun loadGenres() {
+        try {
+            val genres = sendGenresRequest()
+            recyclerViewGenres.adapter = GenresListAdapter(genres)
+            loading2.visibility = View.GONE
+        } catch (_: Exception) {
+            loading2.visibility = View.VISIBLE
+        }
     }
 
-    fun showFilmsByCategory(category: String, isClicked: Boolean){
+    private fun showFilmsByCategory() {
+        recyclerViewNewMovies.adapter =
+            FilmListAdapter(filterMovies(newMovies), userId)
 
+        recyclerViewUpcoming.adapter =
+            FilmListAdapter(filterMovies(upComingMovies), userId)
+    }
+
+    fun updateActiveCategories(category: String) {
         if (!activeCategories.contains(category)) {
             activeCategories.add(category)
         } else {
             activeCategories.remove(category)
         }
 
-        val filteredNewMovies: List<Data> = newMovies.filter { movie ->
-            movie.genres.containsAll(activeCategories)
-        }
-
-        val filteredUpcomingMovies: List<Data> = upComingMovies.filter { movie ->
-            movie.genres.containsAll(activeCategories)
-        }
-
-        recyclerViewNewMovies.adapter = FilmListAdapter(filteredNewMovies, userId)
-        recyclerViewUpcoming.adapter = FilmListAdapter(filteredUpcomingMovies, userId)
+        showFilmsByCategory()
     }
 
-    private fun getBannersImages() {
-        loading2.visibility = View.VISIBLE
-
-        val call = apiService.getMovies(10)
-
-        call.enqueue(object : Callback<ListFilm> {
-            override fun onResponse(call: Call<ListFilm>, response: Response<ListFilm>) {
-                loading2.visibility = View.GONE
-
-                if (response.isSuccessful) {
-
-                    val items = response.body()?.data
-                    setBanners(items)
-                }
-            }
-
-            override fun onFailure(call: Call<ListFilm>, t: Throwable) {
-                loading2.visibility = View.GONE
-            }
-
-        })
+    private fun filterMovies(listMovies: List<Data>): List<Data> {
+        return listMovies.filter { movie ->
+            movie.genres.containsAll(activeCategories)
+        }
     }
 
-    private fun setBanners(films: ArrayList<Data>?) {
-        val sliderItems: MutableList<SliderItems> = mutableListOf()
-
-        if (films != null) {
-            for (film in films) {
-                sliderItems.add(SliderItems(film))
-            }
+    private suspend fun loadBanners(pageId: Int) {
+        try {
+            val banners = sendRequest(pageId)
+            setBanners(banners)
+            loading2.visibility = View.GONE
+        } catch (e: Exception) {
+            loading1.visibility = View.VISIBLE
         }
+    }
+
+    private fun setBanners(films: List<Data>) {
+        val sliderItems = films.map { SliderItems(it) }.toMutableList()
 
         viewPager2.adapter = SliderAdapter(sliderItems, viewPager2, userId)
         viewPager2.clipToPadding = false
@@ -166,11 +150,9 @@ class MainActivity : AppCompatActivity() {
                 slideHandler.removeCallbacks(sliderRunnable)
             }
         })
-
     }
 
     private val sliderRunnable = object : Runnable {
-
         override fun run() {
             viewPager2.currentItem = viewPager2.currentItem + 1
             slideHandler.postDelayed(this, 3000)
@@ -187,45 +169,34 @@ class MainActivity : AppCompatActivity() {
         slideHandler.postDelayed(sliderRunnable, 3000)
     }
 
-    private fun sendRequest(loading: ProgressBar, recyclerView: RecyclerView, pageId: Int): ArrayList<Data> {
-        loading.visibility = View.VISIBLE
+    private suspend fun loadData(
+        loading: ProgressBar,
+        recyclerView: RecyclerView,
+        pageId: Int
+    ): List<Data> {
+        val filmsToReturn = mutableListOf<Data>()
 
-        val call = apiService.getMovies(pageId)
-        val filmsForReturn = ArrayList<Data>()
-
-        call.enqueue(object : Callback<ListFilm> {
-            override fun onResponse(call: Call<ListFilm>, response: Response<ListFilm>) {
-                loading.visibility = View.GONE
-
-                if (response.isSuccessful) {
-                    val films = response.body()?.data!!
-
-                    filmsForReturn.addAll(films)
-                    if (searchTxt.text.isEmpty()) {
-                        recyclerView.adapter = FilmListAdapter(films, userId)
-                        filmsForReturn.clear()
-                        filmsForReturn.addAll(films)
-                    } else {
-                        val filteredItems = films.filter { item ->
-                            item.title?.contains(searchTxt.text.toString()) ?: false
-                        }
-                        recyclerView.adapter = FilmListAdapter(filteredItems, userId)
-                        filmsForReturn.clear()
-                        filmsForReturn.addAll(filteredItems)
-                    }
+        try {
+            val films = sendRequest(pageId)
+            if (searchTxt.text.isEmpty()) {
+                recyclerView.adapter = FilmListAdapter(films, userId)
+                filmsToReturn.clear()
+                filmsToReturn.addAll(films)
+            } else {
+                val filteredItems = films.filter { item ->
+                    item.title?.contains(searchTxt.text.toString()) ?: false
                 }
+                recyclerView.adapter = FilmListAdapter(filteredItems, userId)
+                filmsToReturn.clear()
+                filmsToReturn.addAll(filteredItems)
             }
+            loading.visibility = View.GONE
+        } catch (_: Exception) {
+            loading.visibility = View.VISIBLE
+        }
 
-            override fun onFailure(call: Call<ListFilm>, t: Throwable) {
-                loading.visibility = View.GONE
-            }
-        })
-
-        return filmsForReturn
-    }
-
-    private fun initApiService() {
-        apiService = ApiService.create()
+        Log.d("item", filmsToReturn.size.toString())
+        return filmsToReturn
     }
 
     private fun initListeners() {
@@ -233,31 +204,43 @@ class MainActivity : AppCompatActivity() {
             override fun beforeTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {}
 
             override fun onTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {
-                sendRequest(loading1, recyclerViewNewMovies, 1)
-                sendRequest(loading2, recyclerViewUpcoming, 3)
+                lifecycleScope.launch {
+                    loadData(loading3, recyclerViewNewMovies, 1)
+                    loadData(loading4, recyclerViewUpcoming, 3)
+                }
             }
 
             override fun afterTextChanged(p0: Editable?) {}
         })
 
         likedMoviesActivityBtn.setOnClickListener {
-
             val intent = Intent(this, LikedMovies::class.java)
             intent.putExtra("userId", userId)
             startActivity(intent)
+        }
 
+        personalPageActivityBtn.setOnClickListener {
+            val intent = Intent(this, PersonalPageActivity::class.java)
+            intent.putExtra("userId", userId)
+            startActivity(intent)
         }
     }
 
     private fun initView() {
+        scrollView = binding.scrollView
+        loading1 = binding.progressBar1
+        loading2 = binding.progressBar2
+        loading3 = binding.progressBar3
+        loading4 = binding.progressBar4
+
+        setLoadingVisibilityVisible()
+
         searchTxt = binding.searchEditTxt
         recyclerViewNewMovies = binding.view
         recyclerViewUpcoming = binding.view1
         recyclerViewGenres = binding.genresRecyclerView
-        loading1 = binding.loading
-        loading2 = binding.loading1
-        loading3 = binding.loading2
 
+        personalPageActivityBtn = binding.personalPageActivityBtn
         likedMoviesActivityBtn = binding.likedMoviesActivityBtn
 
         viewPager2 = binding.viewPager
@@ -268,6 +251,13 @@ class MainActivity : AppCompatActivity() {
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         recyclerViewGenres.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+    }
+
+    private fun setLoadingVisibilityVisible() {
+        loading1.visibility = View.VISIBLE
+        loading2.visibility = View.VISIBLE
+        loading3.visibility = View.VISIBLE
+        loading4.visibility = View.VISIBLE
     }
 
     private fun initUserId() {

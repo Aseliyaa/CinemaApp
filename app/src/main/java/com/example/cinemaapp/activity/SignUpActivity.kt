@@ -23,6 +23,7 @@ class SignUpActivity : AppCompatActivity() {
     private lateinit var repeatPasswordTxt: EditText
     private lateinit var tvRedirectLogin: TextView
     private lateinit var emailTxt: EditText
+    private lateinit var userName: EditText
 
     private lateinit var binding: ActivitySignUpBinding
     private lateinit var auth: FirebaseAuth
@@ -87,9 +88,9 @@ class SignUpActivity : AppCompatActivity() {
                 val user = User()
                 user.email = email
                 user.password = password
-                user.name = ""
                 user.birthday = ""
                 user.phone = ""
+                user.userName = userName.text.toString()
 
                 usersRef.child(auth.currentUser!!.uid)
                     .setValue(user)

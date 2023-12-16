@@ -27,6 +27,7 @@ class LikedMovies : AppCompatActivity() {
     private lateinit var films: List<FilmItem>
     private lateinit var userId: String
     private lateinit var homeBtn: ImageView
+    private lateinit var personalPageBtn: ImageView
     private lateinit var binding: ActivityLikedMoviesBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,6 +39,21 @@ class LikedMovies : AppCompatActivity() {
         initDb()
         initView()
         getFilms()
+        btnManager()
+    }
+
+    private fun btnManager() {
+        homeBtn.setOnClickListener {
+            val intent = Intent(this, MainActivity::class.java)
+            intent.putExtra("userId", userId)
+            startActivity(intent)
+        }
+
+        personalPageBtn.setOnClickListener {
+            val intent = Intent(this, PersonalPageActivity::class.java)
+            intent.putExtra("userId", userId)
+            startActivity(intent)
+        }
     }
 
     private fun getFilms() {
@@ -53,20 +69,16 @@ class LikedMovies : AppCompatActivity() {
 
     private fun initView() {
         homeBtn = binding.homePageBtn
+        personalPageBtn = binding.personalPageBtn
         recyclerView = binding.recyclerView
         recyclerView.layoutManager = GridLayoutManager(this, 2)
-
-        homeBtn.setOnClickListener{
-            val intent = Intent(this, MainActivity::class.java)
-            intent.putExtra("userId", userId)
-            startActivity(intent)
-        }
     }
 
-    private fun initDb(){
-        db = AppDatabase.initDb(this)
+    private fun initDb() {
+        db = AppDatabase.initDb(applicationContext)
         filmItemDao = db.filmItemDao()
     }
+
 
     private fun initUserId() {
         userId = intent.getStringExtra("userId").toString()

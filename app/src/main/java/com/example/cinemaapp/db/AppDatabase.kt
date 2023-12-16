@@ -6,10 +6,11 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.example.cinemaapp.domain.FilmItem
+import kotlinx.coroutines.CoroutineScope
 
 @Database(entities = [FilmItem::class], version = 2)
 @TypeConverters(Converter::class)
-abstract class AppDatabase: RoomDatabase() {
+abstract class AppDatabase : RoomDatabase() {
     abstract fun filmItemDao(): FilmItemDao
 
     companion object {

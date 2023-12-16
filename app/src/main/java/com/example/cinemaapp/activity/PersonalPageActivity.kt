@@ -1,34 +1,48 @@
 package com.example.cinemaapp.activity
 
-import android.R
 import android.app.DatePickerDialog
 import android.content.Intent
 import android.os.Bundle
+import kotlinx.coroutines.async
 import android.view.View
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
+import android.widget.ImageView
+import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.appcompat.widget.AppCompatButton
+import androidx.appcompat.widget.AppCompatImageView
+import androidx.lifecycle.lifecycleScope
 import com.example.cinemaapp.databinding.ActivityPersonalPageBinding
-import com.google.android.material.snackbar.Snackbar
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.Locale
 import java.util.regex.Matcher
 import java.util.regex.Pattern
-
 
 class PersonalPageActivity : AppCompatActivity() {
     private lateinit var phoneTv: TextView
     private lateinit var userNameTv: TextView
     private lateinit var birthdayTv: TextView
     private lateinit var emailTv: TextView
+
+    private lateinit var homeBtn: ImageView
+    private lateinit var likedMoviesBtn: ImageView
+    private lateinit var logOutBtn: AppCompatButton
+
+    private lateinit var progressBar: ProgressBar
+
+    private lateinit var selectedImage: AppCompatImageView
+
+    private lateinit var scrollView: ScrollView
+
     private lateinit var binding: ActivityPersonalPageBinding
 
     private lateinit var userId: String
@@ -38,21 +52,38 @@ class PersonalPageActivity : AppCompatActivity() {
         initBinding()
         setContentView(binding.root)
 
-        initUser()
-        initView()
-        setInfo(userRef)
-        btnManager()
+        lifecycleScope.launch {
+            initUser()
+            initView()
+            setInfo()
+            userInfoManager()
+            btnManager()
+        }
+    }
+
+    private fun navigateToActivity(ktClass: Class<*>) {
+        val intent = Intent(this, ktClass)
+        intent.putExtra("userId", userId)
+        startActivity(intent)
     }
 
     private fun btnManager() {
+        homeBtn.setOnClickListener {
+            navigateToActivity(MainActivity::class.java)
+        }
+        likedMoviesBtn.setOnClickListener {
+            navigateToActivity(LikedMovies::class.java)
+        }
+        logOutBtn.setOnClickListener {
+            navigateToActivity(LoginActivity::class.java)
+        }
+    }
+
+    private fun userInfoManager() {
         val regex = "\\+375\\d{9}"
         val pattern: Pattern = Pattern.compile(regex)
-        phoneTv.setOnClickListener {
-            val currentPhone = phoneTv.text.toString()
-            phoneTv.text = currentPhone
-            phoneTv.isFocusableInTouchMode = true
-        }
-        phoneTv.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+
+        phoneTv.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) {
                 val newPhone = phoneTv.text.toString()
                 val matcher: Matcher = pattern.matcher(newPhone)
@@ -64,24 +95,25 @@ class PersonalPageActivity : AppCompatActivity() {
                     phoneTv.text = ""
                 }
             }
+            phoneTv.isCursorVisible = hasFocus
         }
+
         birthdayTv.setOnClickListener {
             val calendar: Calendar = Calendar.getInstance()
             val year: Int = calendar.get(Calendar.YEAR)
             val month: Int = calendar.get(Calendar.MONTH)
             val dayOfMonth: Int = calendar.get(Calendar.DAY_OF_MONTH)
             val datePickerDialog = DatePickerDialog(
-                this@PersonalPageActivity,
-                { view, year, month, dayOfMonth ->
-                    val birthdate = String.format(
+                this@PersonalPageActivity, { _, year, month, dayOfMonth ->
+                    val birthDate = String.format(
                         Locale.getDefault(),
                         "%02d.%02d.%04d",
                         dayOfMonth,
                         month + 1,
                         year
                     )
-                    birthdayTv.text = birthdate
-                    userRef.child("birthday").setValue(birthdate)
+                    birthdayTv.text = birthDate
+                    userRef.child("birthday").setValue(birthDate)
                 },
                 year,
                 month,
@@ -89,44 +121,61 @@ class PersonalPageActivity : AppCompatActivity() {
             )
             datePickerDialog.show()
         }
-        birthdayTv.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+
+        birthdayTv.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) {
-                val newBirthdate = birthdayTv.text.toString()
-                userRef.child("birthday").setValue(newBirthdate)
+                val newBirthDate = birthdayTv.text.toString()
+                userRef.child("birthday").setValue(newBirthDate)
             }
+            birthdayTv.isCursorVisible = hasFocus
         }
     }
-    private fun setInfo(userRef: DatabaseReference) {
-        userRef.child("name").get().addOnSuccessListener { dataSnapshot: DataSnapshot ->
-            val nameStr = dataSnapshot.getValue(
-                String::class.java
-            )
-            userNameTv.text = nameStr
-        }.addOnFailureListener { userNameTv.text = "" }
 
-        userRef.child("email").get().addOnSuccessListener { dataSnapshot: DataSnapshot ->
-            val emailStr = dataSnapshot.getValue(
-                String::class.java
-            )
-            emailTv.text = emailStr
-        }.addOnFailureListener { emailTv.text = "" }
-
-        userRef.child("phone").get().addOnSuccessListener { dataSnapshot: DataSnapshot ->
-            val phoneStr = dataSnapshot.getValue(
-                String::class.java
-            )
-            phoneTv.text = phoneStr
-        }.addOnFailureListener { phoneTv.text = "" }
-
-        userRef.child("birthday").get().addOnSuccessListener { dataSnapshot: DataSnapshot ->
-            val birthdayStr = dataSnapshot.getValue(
-                String::class.java
-            )
-            birthdayTv.text = birthdayStr
-        }.addOnFailureListener { birthdayTv.text = "" }
+    private suspend fun setInfo(pathString: String, tv: TextView) {
+        withContext(Dispatchers.IO) {
+            userRef.child(pathString).get().addOnSuccessListener { dataSnapshot: DataSnapshot ->
+                val str = dataSnapshot.getValue(
+                    String::class.java
+                )
+                tv.text = str
+            }.addOnFailureListener { tv.text = "" }
+        }
     }
+
+    private suspend fun getInfo(pathString: String): String {
+        return withContext(Dispatchers.IO) {
+            val dataSnapshot = userRef.child(pathString).get().await()
+            dataSnapshot.getValue(String::class.java) ?: ""
+        }
+    }
+
+    private suspend fun setInfo() {
+        withContext(Dispatchers.Main) {
+            scrollView.visibility = View.GONE
+            progressBar.visibility = View.VISIBLE
+
+            val nameDeferred = async { getInfo("name") }
+            val emailDeferred = async { getInfo("email") }
+            val phoneDeferred = async { getInfo("phone") }
+            val birthdayDeferred = async { getInfo("birthday") }
+
+            val name = nameDeferred.await()
+            val email = emailDeferred.await()
+            val phone = phoneDeferred.await()
+            val birthday = birthdayDeferred.await()
+
+            userNameTv.text = name
+            emailTv.text = email
+            phoneTv.text = phone
+            birthdayTv.text = birthday
+
+            progressBar.visibility = View.GONE
+            scrollView.visibility = View.VISIBLE
+        }
+    }
+
     private fun initUser() {
-        userId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+        userId = intent.getStringExtra("userId").toString()
         userRef = FirebaseDatabase.getInstance().getReference("users").child(userId)
     }
 
@@ -135,6 +184,15 @@ class PersonalPageActivity : AppCompatActivity() {
         userNameTv = binding.userName
         birthdayTv = binding.birthdayText
         emailTv = binding.emailText
+
+        scrollView = binding.hide
+        progressBar = binding.progressBar
+
+        homeBtn = binding.homeBtn
+        likedMoviesBtn = binding.likedMoviesBtn
+        logOutBtn = binding.logOutBtn
+
+        selectedImage = binding.selectedImage
     }
 
     private fun initBinding() {

@@ -104,7 +104,7 @@
                     app:tint="@color/white" />
 
                 <ImageView
-                    android:id="@+id/imageView6"
+                    android:id="@+id/personalPageBtn"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center_vertical"

@@ -41,16 +41,20 @@ android {
 }
 
 dependencies {
+    //retrofit
     implementation("com.squareup.retrofit2:retrofit:2.6.2")
     implementation("com.squareup.retrofit2:converter-gson:2.6.2")
     implementation("com.squareup.retrofit2:converter-scalars:2.6.2")
     implementation("androidx.room:room-runtime:2.6.1")
+    //fb
     implementation("com.google.firebase:firebase-auth:22.3.0")
     implementation("com.google.firebase:firebase-database-ktx:20.3.0")
     implementation("com.google.firebase:firebase-database:20.3.0")
     annotationProcessor("androidx.room:room-compiler:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
-    implementation("com.android.volley:volley:1.2.1")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.5.2")
+
     implementation("io.coil-kt:coil:2.5.0")
     implementation("com.google.code.gson:gson:2.9.1")
     implementation("androidx.core:core-ktx:1.12.0")
